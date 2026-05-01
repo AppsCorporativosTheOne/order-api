@@ -1,0 +1,19 @@
+{
+  "name": "api",
+  "version": "1.0.0",
+  "description": "Complete order API, for any kind food service ",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AppsCorporativosTheOne/order-api.git"
+  },
+  "author": "The One Software",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/AppsCorporativosTheOne/order-api/issues"
+  },
+  "homepage": "https://github.com/AppsCorporativosTheOne/order-api#readme"
+}
