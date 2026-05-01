@@ -40,3 +40,5 @@ npm run dev
 
 - Contrato da API: `docs/api.md`
 - OpenAPI: `docs/openapi.yaml`
+
+Recursos principais: produtos, estoque, operadores, caixa (`/operators`, `/cash`) e mesas (`/dining-tables`).

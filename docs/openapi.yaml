@@ -136,6 +136,403 @@ paths:
                 $ref: "#/components/schemas/StockEntry"
         "404":
           description: Lancamento nao encontrado
+  /operators:
+    post:
+      summary: Cadastra operador de caixa ou atendimento
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOperatorInput"
+      responses:
+        "201":
+          description: Operador criado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Operator"
+        "400":
+          description: Dados invalidos
+        "409":
+          description: Nome duplicado
+    get:
+      summary: Lista operadores cadastrados
+      parameters:
+        - in: query
+          name: activeOnly
+          schema:
+            type: string
+            enum: [ "true", "false" ]
+          description: Filtra operadores ativos
+      responses:
+        "200":
+          description: Lista de operadores
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Operator"
+  /operators/{id}:
+    get:
+      summary: Busca operador por ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Operador encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Operator"
+        "404":
+          description: Operador nao encontrado
+  /dining-tables:
+    post:
+      summary: Cadastra mesa
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDiningTableInput"
+      responses:
+        "201":
+          description: Mesa criada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiningTable"
+        "409":
+          description: Nome duplicado
+    get:
+      summary: Lista mesas cadastradas
+      parameters:
+        - in: query
+          name: activeOnly
+          schema:
+            type: string
+            enum: [ "true", "false" ]
+      responses:
+        "200":
+          description: Lista de mesas
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DiningTable"
+  /dining-tables/{id}:
+    get:
+      summary: Busca mesa por ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Mesa encontrada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiningTable"
+        "404":
+          description: Mesa nao encontrada
+  /cash/day-sessions:
+    post:
+      summary: Abre sessao diaria do caixa (uma unica data de negocio)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OpenCashDaySessionInput"
+      responses:
+        "201":
+          description: Sessao diaria criada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CashDaySession"
+        "409":
+          description: Data ja utilizada ou caixa ja aberto
+  /cash/day-sessions/dates/{businessDate}/session:
+    get:
+      summary: Consulta apenas metadados da sessao diaria por data
+      parameters:
+        - in: path
+          name: businessDate
+          required: true
+          schema:
+            type: string
+            example: "2026-05-01"
+      responses:
+        "200":
+          description: Metadados do dia encontrados
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CashDaySession"
+        "404":
+          description: Sessao da data informada nao encontrada
+  /cash/day-sessions/dates/{businessDate}/overview:
+    get:
+      summary: Visao consolidada do dia incluindo operadores e totais monetarios parciais
+      parameters:
+        - in: path
+          name: businessDate
+          required: true
+          schema:
+            type: string
+            example: "2026-05-01"
+      responses:
+        "200":
+          description: Visao geral montada pela API (ver tambem docs/api.md)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CashDayOverview"
+        "404":
+          description: Dia nao encontrado
+  /cash/day-sessions/{cashDaySessionId}/overview:
+    get:
+      summary: Mesma visao consolidada usando o UUID da sessao diaria
+      parameters:
+        - in: path
+          name: cashDaySessionId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Visao consolidada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CashDayOverview"
+        "404":
+          description: Dia nao encontrado
+  /cash/day-sessions/{cashDaySessionId}/orders:
+    get:
+      summary: Lista pedidos ou mesas associadas ao caixa principal daquele dia
+      parameters:
+        - in: path
+          name: cashDaySessionId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Lista de registros
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CashOrder"
+        "404":
+          description: Dia nao encontrado
+  /cash/day-sessions/{cashDaySessionId}/principal-movements:
+    post:
+      summary: Lanca movimento manual no caixa principal (dia aberto)
+      parameters:
+        - in: path
+          name: cashDaySessionId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePrincipalCashMovementInput"
+      responses:
+        "201":
+          description: Lancamento registrado no principal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CashPrincipalMovement"
+        "409":
+          description: Dia encerrado
+  /cash/day-sessions/{cashDaySessionId}/close:
+    patch:
+      summary: Encerra o dia quando todos os operadores ja fecharam e informa conferencia fisica do principal
+      parameters:
+        - in: path
+          name: cashDaySessionId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CloseCashDaySessionInput"
+      responses:
+        "200":
+          description: Dia encerrado + snapshot principal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CloseCashDaySessionResult"
+        "409":
+          description: Dia ja encerrado ou ainda existem sessoes em aberto
+  /cash/day-sessions/{cashDaySessionId}/operator-sessions:
+    post:
+      summary: Operador abre sessao dentro do dia
+      parameters:
+        - in: path
+          name: cashDaySessionId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OpenCashOperatorSessionInput"
+      responses:
+        "201":
+          description: Sessao de operador aberta
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CashOperatorSession"
+        "404":
+          description: Operador ou dia nao encontrado
+        "409":
+          description: Dia encerrado, operador repetido ou outro drawer aberto em outra data
+  /cash/operator-sessions/{operatorSessionId}/close:
+    patch:
+      summary: Confere valores e fecha o drawer do operador
+      parameters:
+        - in: path
+          name: operatorSessionId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CloseCashOperatorSessionInput"
+      responses:
+        "200":
+          description: Drawer encerrado com totais esperados/conferidos
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CloseCashOperatorSessionResult"
+        "409":
+          description: Ja encerrado ou pedidos/mesas em aberto
+  /cash/operator-sessions/{operatorSessionId}/orders:
+    post:
+      summary: Operador abre uma mesa ou pedido vinculados ao caixa principal do dia
+      parameters:
+        - in: path
+          name: operatorSessionId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OpenCashOrderInput"
+      responses:
+        "201":
+          description: Pedido criado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CashOrder"
+        "409":
+          description: Dia ou drawer encerrados
+  /cash/operator-sessions/{operatorSessionId}/movements:
+    post:
+      summary: Lanca entrada/saida monetaria dentro do fluxo financeiro daquele drawer
+      parameters:
+        - in: path
+          name: operatorSessionId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCashMovementInput"
+      responses:
+        "201":
+          description: Movimento registrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CashMovement"
+  /cash/operator-sessions/{operatorSessionId}/detail:
+    get:
+      summary: Retorna dados completos para o painel do operador
+      parameters:
+        - in: path
+          name: operatorSessionId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Drawer com movimentos e totais
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CashOperatorSessionDetail"
+        "404":
+          description: Sessao nao encontrada
+  /cash/orders/{cashOrderId}/close:
+    patch:
+      summary: Encerra mesa/pedido antes de fechar o drawer do operador
+      parameters:
+        - in: path
+          name: cashOrderId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Pedido encerrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CashOrder"
+        "409":
+          description: Pedido ja encerrado ou dia fechado
+        "404":
+          description: Pedido nao encontrado
 components:
   schemas:
     CreateProductInput:
@@ -229,3 +626,436 @@ components:
             createdAt:
               type: string
               format: date-time
+    CreateOperatorInput:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        code:
+          type: string
+          nullable: true
+          description: codigo opcional deve ser unico quando informado
+    Operator:
+      type: object
+      required:
+        - id
+        - name
+        - active
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        code:
+          type: string
+          nullable: true
+        active:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    OpenCashDaySessionInput:
+      type: object
+      required:
+        - businessDate
+      properties:
+        businessDate:
+          type: string
+          description: formato YYYY-MM-DD
+          example: "2026-05-01"
+        notes:
+          type: string
+          nullable: true
+        principalOpeningBalance:
+          type: number
+          minimum: 0
+          description: fundo inicial da tesouraria principal
+    CloseCashDaySessionInput:
+      type: object
+      required:
+        - countedPrincipalCashBalance
+      properties:
+        countedPrincipalCashBalance:
+          type: number
+        principalCloseNotes:
+          type: string
+          nullable: true
+    CloseCashDaySessionResult:
+      type: object
+      properties:
+        cashDaySession:
+          $ref: "#/components/schemas/CashDaySession"
+        principalTotalsSnapshot:
+          $ref: "#/components/schemas/CashPrincipalMovementTotals"
+        countedPrincipalCashBalance:
+          type: number
+        principalCashDifference:
+          type: number
+    CashDaySession:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        businessDate:
+          type: string
+        status:
+          type: string
+          enum: [ OPEN, CLOSED ]
+        notes:
+          type: string
+          nullable: true
+        openedAt:
+          type: string
+          format: date-time
+        closedAt:
+          type: string
+          format: date-time
+          nullable: true
+        principalOpeningBalance:
+          type: number
+        principalExpectedCashBalance:
+          type: number
+          nullable: true
+        principalCountedCashBalance:
+          type: number
+          nullable: true
+        principalCashDifference:
+          type: number
+          nullable: true
+        principalCloseNotes:
+          type: string
+          nullable: true
+    CashDayOverview:
+      type: object
+      description: ver docs/api.md para o payload JSON completo
+      properties:
+        cashDaySession:
+          $ref: "#/components/schemas/CashDaySession"
+        operatorDrawers:
+          type: array
+          items:
+            type: object
+        principal:
+          type: object
+        totals:
+          type: object
+    OpenCashOperatorSessionInput:
+      type: object
+      required:
+        - operatorId
+      properties:
+        operatorId:
+          type: string
+          format: uuid
+        openingBalance:
+          type: number
+          minimum: 0
+        notes:
+          type: string
+          nullable: true
+    CashOperatorSession:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        cashDaySessionId:
+          type: string
+          format: uuid
+        operatorId:
+          type: string
+          format: uuid
+        openingBalance:
+          type: number
+        status:
+          type: string
+          enum: [ OPEN, CLOSED ]
+        notes:
+          type: string
+          nullable: true
+        openedAt:
+          type: string
+          format: date-time
+        closedAt:
+          type: string
+          format: date-time
+          nullable: true
+        expectedCashBalance:
+          type: number
+          nullable: true
+        countedCashBalance:
+          type: number
+          nullable: true
+        cashDifference:
+          type: number
+          nullable: true
+    CloseCashOperatorSessionInput:
+      type: object
+      required:
+        - countedCashBalance
+      properties:
+        countedCashBalance:
+          type: number
+        notes:
+          type: string
+          nullable: true
+    CashMovementTotals:
+      type: object
+      properties:
+        paymentsIn:
+          type: number
+        changeOut:
+          type: number
+        cashSupplyIn:
+          type: number
+        cashWithdrawalOut:
+          type: number
+        otherIn:
+          type: number
+        otherOut:
+          type: number
+        netImpact:
+          type: number
+    CloseCashOperatorSessionResult:
+      type: object
+      properties:
+        operatorSession:
+          $ref: "#/components/schemas/CashOperatorSession"
+        totals:
+          $ref: "#/components/schemas/CashMovementTotals"
+        countedCashBalance:
+          type: number
+        cashDifference:
+          type: number
+    CreateCashMovementInput:
+      type: object
+      required:
+        - kind
+        - amount
+      properties:
+        kind:
+          type: string
+          enum:
+            - PAYMENT_RECEIVED
+            - CHANGE_DELIVERED
+            - CASH_SUPPLY
+            - CASH_WITHDRAWAL
+            - OTHER_IN
+            - OTHER_OUT
+        amount:
+          type: number
+          exclusiveMinimum: 0
+        description:
+          type: string
+          nullable: true
+        referenceType:
+          type: string
+          nullable: true
+        referenceId:
+          type: string
+          format: uuid
+          nullable: true
+        occurredAt:
+          type: string
+          format: date-time
+          nullable: true
+    CashMovement:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        cashOperatorSessionId:
+          type: string
+          format: uuid
+        kind:
+          type: string
+        amount:
+          type: number
+        cashEffect:
+          type: string
+          enum: [ IN, OUT ]
+        description:
+          type: string
+          nullable: true
+        referenceType:
+          type: string
+          nullable: true
+        referenceId:
+          type: string
+          format: uuid
+          nullable: true
+        occurredAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+    CashOperatorSessionDetail:
+      type: object
+      properties:
+        operatorSession:
+          $ref: "#/components/schemas/CashOperatorSession"
+        operator:
+          $ref: "#/components/schemas/Operator"
+        movementTotals:
+          $ref: "#/components/schemas/CashMovementTotals"
+        computed:
+          type: object
+        movements:
+          type: array
+          items:
+            $ref: "#/components/schemas/CashMovement"
+    CreateDiningTableInput:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        sortOrder:
+          type: integer
+    DiningTable:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        active:
+          type: boolean
+        sortOrder:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+    OpenCashOrderInput:
+      type: object
+      properties:
+        diningTableId:
+          type: string
+          format: uuid
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+    CashOrder:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        cashDaySessionId:
+          type: string
+          format: uuid
+        cashOperatorSessionId:
+          type: string
+          format: uuid
+        diningTableId:
+          type: string
+          format: uuid
+          nullable: true
+        status:
+          type: string
+          enum: [ OPEN, CLOSED ]
+        notes:
+          type: string
+          nullable: true
+        openedAt:
+          type: string
+          format: date-time
+        closedAt:
+          type: string
+          format: date-time
+          nullable: true
+    CreatePrincipalCashMovementInput:
+      type: object
+      required:
+        - kind
+        - amount
+      properties:
+        kind:
+          type: string
+          enum:
+            - PRINCIPAL_SUPPLY
+            - PRINCIPAL_WITHDRAWAL
+            - OTHER_IN
+            - OTHER_OUT
+        amount:
+          type: number
+          exclusiveMinimum: 0
+        description:
+          type: string
+          nullable: true
+        referenceType:
+          type: string
+          nullable: true
+        referenceId:
+          type: string
+          format: uuid
+          nullable: true
+        occurredAt:
+          type: string
+          format: date-time
+          nullable: true
+    CashPrincipalMovementTotals:
+      type: object
+      properties:
+        operatorContributionIn:
+          type: number
+        principalSupplyIn:
+          type: number
+        principalWithdrawalOut:
+          type: number
+        otherIn:
+          type: number
+        otherOut:
+          type: number
+        netImpact:
+          type: number
+    CashPrincipalMovement:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        cashDaySessionId:
+          type: string
+          format: uuid
+        cashOperatorSessionId:
+          type: string
+          format: uuid
+          nullable: true
+        kind:
+          type: string
+        amount:
+          type: number
+        cashEffect:
+          type: string
+          enum: [ IN, OUT ]
+        description:
+          type: string
+          nullable: true
+        referenceType:
+          type: string
+          nullable: true
+        referenceId:
+          type: string
+          format: uuid
+          nullable: true
+        occurredAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
