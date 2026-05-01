@@ -1,0 +1,231 @@
+openapi: 3.0.3
+info:
+  title: Order API
+  version: 1.0.0
+  description: API para restaurantes, lanchonetes, cafeterias e negocios similares.
+servers:
+  - url: http://localhost:3333
+paths:
+  /health:
+    get:
+      summary: Verifica disponibilidade da API
+      responses:
+        "200":
+          description: API disponivel
+  /products:
+    post:
+      summary: Cria um produto
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProductInput"
+      responses:
+        "201":
+          description: Produto criado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "400":
+          description: Dados invalidos
+        "409":
+          description: Produto ja existente
+    get:
+      summary: Lista produtos
+      parameters:
+        - in: query
+          name: search
+          schema:
+            type: string
+        - in: query
+          name: category
+          schema:
+            type: string
+        - in: query
+          name: department
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Lista de produtos
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Product"
+  /products/{id}:
+    get:
+      summary: Busca produto por ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Produto encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "404":
+          description: Produto nao encontrado
+  /stocks:
+    post:
+      summary: Cria um lancamento de estoque
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateStockEntryInput"
+      responses:
+        "201":
+          description: Lancamento de estoque criado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StockEntry"
+        "400":
+          description: Dados invalidos
+        "404":
+          description: Produto nao encontrado
+    get:
+      summary: Lista lancamentos de estoque
+      parameters:
+        - in: query
+          name: productId
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: expiresUntil
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Lista de lancamentos de estoque
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StockEntry"
+  /stocks/{id}:
+    get:
+      summary: Busca lancamento de estoque por ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Lancamento encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StockEntry"
+        "404":
+          description: Lancamento nao encontrado
+components:
+  schemas:
+    CreateProductInput:
+      type: object
+      required:
+        - name
+        - category
+        - department
+        - sellWithoutStock
+      properties:
+        brand:
+          type: string
+          nullable: true
+          example: Coca-Cola
+        name:
+          type: string
+          example: Coca-Cola Lata 350ml
+        category:
+          type: string
+          example: Refrigerantes
+        department:
+          type: string
+          example: Bebidas
+        sellWithoutStock:
+          type: string
+          enum: [YES, NO]
+          example: NO
+    Product:
+      allOf:
+        - $ref: "#/components/schemas/CreateProductInput"
+        - type: object
+          required:
+            - id
+            - createdAt
+          properties:
+            id:
+              type: string
+              format: uuid
+            createdAt:
+              type: string
+              format: date-time
+    CreateStockEntryInput:
+      type: object
+      required:
+        - productId
+        - quantity
+        - unitValue
+        - cost
+      properties:
+        productId:
+          type: string
+          format: uuid
+        quantity:
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          example: 10
+        manufacturingDate:
+          type: string
+          format: date
+          nullable: true
+          example: "2026-04-20"
+        expirationDate:
+          type: string
+          format: date
+          nullable: true
+          example: "2026-07-20"
+        unitValue:
+          type: number
+          minimum: 0
+          example: 8.5
+        cost:
+          type: number
+          minimum: 0
+          example: 4
+    StockEntry:
+      allOf:
+        - $ref: "#/components/schemas/CreateStockEntryInput"
+        - type: object
+          required:
+            - id
+            - finalValue
+            - createdAt
+          properties:
+            id:
+              type: string
+              format: uuid
+            finalValue:
+              type: number
+              example: 85
+            createdAt:
+              type: string
+              format: date-time
