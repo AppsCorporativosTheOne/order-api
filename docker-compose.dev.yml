@@ -1,0 +1,44 @@
+# Desenvolvimento: Postgres + API com hot-reload (codigo montado do host).
+# Uso: docker compose -f docker-compose.dev.yml up --build
+# Depois: http://localhost:3333/docs (ajuste PORT se mudar no compose)
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: orders
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d orders"]
+      interval: 3s
+      timeout: 5s
+      retries: 15
+
+  api:
+    init: true
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    ports:
+      - "${PORT:-3333}:3333"
+    environment:
+      NODE_ENV: development
+      PORT: "${PORT:-3333}"
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/orders
+      USE_DEV_SEED: "${USE_DEV_SEED:-false}"
+    volumes:
+      - ./:/app
+      - api_node_modules:/app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_dev_data:
+  api_node_modules:

@@ -1,0 +1,12 @@
+node_modules
+dist
+.git
+.github
+coverage
+.cursor
+*.md
+.env
+.env.*
+!.env.example
+!.env.production.example
+npm-debug.log*

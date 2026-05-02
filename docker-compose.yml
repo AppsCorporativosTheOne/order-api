@@ -1,0 +1,16 @@
+# Producao: apenas a API (Postgres deve existir fora, ex.: RDS ou outro compose).
+# Copie .env.production.example -> .env.production e preencha (arquivo ignorado pelo git).
+# Uso: docker compose up --build -d
+
+services:
+  api:
+    init: true
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    ports:
+      - "${PORT:-3333}:3333"
+    env_file:
+      - .env.production
+    restart: unless-stopped
