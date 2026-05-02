@@ -1,7 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const pg = require("pg");
-require("dotenv/config");
+require("dotenv").config({ override: true });
 
 async function main() {
   if (!process.env.DATABASE_URL) {
