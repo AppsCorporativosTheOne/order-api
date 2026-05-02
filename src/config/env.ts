@@ -16,6 +16,11 @@ const envSchema = z.object({
         "PORT nao pode ser 5432 (porta do PostgreSQL). Defina a porta HTTP da API (ex.: 3333); o banco fica em DATABASE_URL.",
     }),
   DATABASE_URL: z.string().url(),
+  USE_DEV_SEED: z
+    .string()
+    .optional()
+    .default("false")
+    .transform((value) => value === "true" || value === "1"),
 });
 
 export const env = envSchema.parse(process.env);

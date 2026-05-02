@@ -5,6 +5,9 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",
+    "dev:once": "tsx src/server.ts",
+    "dev:usedata": "cross-env USE_DEV_SEED=true tsx watch src/server.ts",
+    "dev:usedata:once": "cross-env USE_DEV_SEED=true tsx src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
     "db:migrate": "node scripts/run-migrations.js",
@@ -22,6 +25,8 @@
     "express": "^4.21.2",
     "helmet": "^8.0.0",
     "pg": "^8.13.1",
+    "swagger-ui-express": "^5.0.1",
+    "yaml": "^2.8.4",
     "zod": "^3.24.1"
   },
   "devDependencies": {
@@ -29,6 +34,8 @@
     "@types/express": "^5.0.0",
     "@types/node": "^22.10.2",
     "@types/pg": "^8.11.10",
+    "@types/swagger-ui-express": "^4.1.8",
+    "cross-env": "^10.1.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
