@@ -6,7 +6,7 @@ import {
   ProductRepository,
   UpdateProductData,
 } from "../../domain/products/ProductRepository.js";
-import { CreateProductUseCase } from "./CreateProductUseCase.js";
+import { UpdateProductUseCase } from "./UpdateProductUseCase.js";
 
 class InMemoryProductRepository implements ProductRepository {
   private products: Product[] = [];
@@ -34,7 +34,9 @@ class InMemoryProductRepository implements ProductRepository {
   }
 
   async findByName(name: string): Promise<Product | null> {
-    return this.products.find((product) => product.name.toLowerCase() === name.toLowerCase()) ?? null;
+    return (
+      this.products.find((product) => product.name.toLowerCase() === name.toLowerCase()) ?? null
+    );
   }
 
   async list(_filters: ListProductsFilters): Promise<Product[]> {
@@ -80,44 +82,84 @@ class InMemoryProductRepository implements ProductRepository {
   }
 }
 
-describe("CreateProductUseCase", () => {
-  it("creates a product", async () => {
+describe("UpdateProductUseCase", () => {
+  it("updates product fields", async () => {
     const repository = new InMemoryProductRepository();
-    const useCase = new CreateProductUseCase(repository);
-
-    const product = await useCase.execute({
-      brand: "Coca-Cola",
-      name: "Coca-Cola Lata 350ml",
-      category: "Refrigerantes",
-      department: "Bebidas",
+    const useCase = new UpdateProductUseCase(repository);
+    const product = await repository.create({
+      name: "Agua 500ml",
+      category: "Bebidas",
+      department: "Geladeira",
       sellWithoutStock: "NO",
     });
 
-    expect(product.id).toEqual(expect.any(String));
-    expect(product.name).toBe("Coca-Cola Lata 350ml");
+    const updated = await useCase.execute(product.id, { name: "Agua Mineral 500ml" });
+
+    expect(updated.name).toBe("Agua Mineral 500ml");
   });
 
-  it("does not create two products with the same name", async () => {
+  it("rejects duplicate name from another product", async () => {
     const repository = new InMemoryProductRepository();
-    const useCase = new CreateProductUseCase(repository);
-
-    await useCase.execute({
-      name: "Cafe Expresso",
-      category: "Cafes",
-      department: "Bebidas",
+    const useCase = new UpdateProductUseCase(repository);
+    const a = await repository.create({
+      name: "Suco",
+      category: "Bebidas",
+      department: "Geladeira",
+      sellWithoutStock: "YES",
+    });
+    await repository.create({
+      name: "Limonada",
+      category: "Bebidas",
+      department: "Geladeira",
       sellWithoutStock: "YES",
     });
 
-    await expect(
-      useCase.execute({
-        name: "cafe expresso",
-        category: "Cafes",
-        department: "Bebidas",
-        sellWithoutStock: "YES",
-      }),
-    ).rejects.toMatchObject({
+    await expect(useCase.execute(a.id, { name: "limonada" })).rejects.toMatchObject({
       code: "PRODUCT_ALREADY_EXISTS",
       statusCode: 409,
+    });
+  });
+
+  it("allows keeping the same name on the same product", async () => {
+    const repository = new InMemoryProductRepository();
+    const useCase = new UpdateProductUseCase(repository);
+    const product = await repository.create({
+      name: "Cha",
+      category: "Bebidas",
+      department: "Quentes",
+      sellWithoutStock: "NO",
+    });
+
+    await expect(useCase.execute(product.id, { name: "CHA" })).resolves.toMatchObject({
+      id: product.id,
+    });
+  });
+
+  it("404 for unknown product", async () => {
+    const repository = new InMemoryProductRepository();
+    const useCase = new UpdateProductUseCase(repository);
+
+    await expect(
+      useCase.execute(crypto.randomUUID(), { name: "Outro nome" }),
+    ).rejects.toMatchObject({
+      code: "PRODUCT_NOT_FOUND",
+      statusCode: 404,
+    });
+  });
+
+  it("400 for empty patch", async () => {
+    const repository = new InMemoryProductRepository();
+    const useCase = new UpdateProductUseCase(repository);
+    const product = await repository.create({
+      name: "Pao",
+      category: "Padaria",
+      department: "Loja",
+      sellWithoutStock: "NO",
+    });
+
+    await expect(useCase.execute(product.id, {})).rejects.toMatchObject({
+      code: "PRODUCT_UPDATE_EMPTY_BODY",
+      statusCode: 400,
     });
   });
 });

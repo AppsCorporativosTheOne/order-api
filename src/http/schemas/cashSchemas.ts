@@ -82,3 +82,10 @@ export const openCashOrderBodySchema = z.object({
 export const cashOrderIdParamsSchema = z.object({
   cashOrderId: z.string().uuid(),
 });
+
+export const createCashOrderLineBodySchema = z.object({
+  productId: z.string().uuid(),
+  quantity: z.coerce.number().positive(),
+  unitPrice: z.coerce.number().nonnegative().optional(),
+  notes: z.string().max(2000).nullable().optional(),
+});

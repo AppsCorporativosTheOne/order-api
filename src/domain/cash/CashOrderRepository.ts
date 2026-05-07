@@ -12,5 +12,5 @@ export interface CashOrderRepository {
   findById(id: string): Promise<CashOrder | null>;
   listByCashDaySessionId(cashDaySessionId: string): Promise<CashOrder[]>;
   countOpenByCashOperatorSessionId(cashOperatorSessionId: string): Promise<number>;
-  close(orderId: string): Promise<CashOrder>;
+  close(orderId: string, consumedTotal: number): Promise<CashOrder>;
 }

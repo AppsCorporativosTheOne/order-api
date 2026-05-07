@@ -6,7 +6,7 @@ import {
   ProductRepository,
   UpdateProductData,
 } from "../../domain/products/ProductRepository.js";
-import { CreateProductUseCase } from "./CreateProductUseCase.js";
+import { DeleteProductUseCase } from "./DeleteProductUseCase.js";
 
 class InMemoryProductRepository implements ProductRepository {
   private products: Product[] = [];
@@ -34,7 +34,9 @@ class InMemoryProductRepository implements ProductRepository {
   }
 
   async findByName(name: string): Promise<Product | null> {
-    return this.products.find((product) => product.name.toLowerCase() === name.toLowerCase()) ?? null;
+    return (
+      this.products.find((product) => product.name.toLowerCase() === name.toLowerCase()) ?? null
+    );
   }
 
   async list(_filters: ListProductsFilters): Promise<Product[]> {
@@ -80,43 +82,71 @@ class InMemoryProductRepository implements ProductRepository {
   }
 }
 
-describe("CreateProductUseCase", () => {
-  it("creates a product", async () => {
+describe("DeleteProductUseCase", () => {
+  it("deletes an existing product", async () => {
     const repository = new InMemoryProductRepository();
-    const useCase = new CreateProductUseCase(repository);
-
-    const product = await useCase.execute({
-      brand: "Coca-Cola",
-      name: "Coca-Cola Lata 350ml",
-      category: "Refrigerantes",
-      department: "Bebidas",
+    const useCase = new DeleteProductUseCase(repository);
+    const product = await repository.create({
+      name: "Temporario",
+      category: "X",
+      department: "Y",
       sellWithoutStock: "NO",
     });
 
-    expect(product.id).toEqual(expect.any(String));
-    expect(product.name).toBe("Coca-Cola Lata 350ml");
+    await useCase.execute(product.id);
+
+    expect(await repository.findById(product.id)).toBeNull();
   });
 
-  it("does not create two products with the same name", async () => {
+  it("404 for unknown product", async () => {
     const repository = new InMemoryProductRepository();
-    const useCase = new CreateProductUseCase(repository);
+    const useCase = new DeleteProductUseCase(repository);
 
-    await useCase.execute({
-      name: "Cafe Expresso",
-      category: "Cafes",
-      department: "Bebidas",
-      sellWithoutStock: "YES",
+    await expect(useCase.execute(crypto.randomUUID())).rejects.toMatchObject({
+      code: "PRODUCT_NOT_FOUND",
+      statusCode: 404,
     });
+  });
 
-    await expect(
-      useCase.execute({
-        name: "cafe expresso",
-        category: "Cafes",
-        department: "Bebidas",
-        sellWithoutStock: "YES",
-      }),
-    ).rejects.toMatchObject({
-      code: "PRODUCT_ALREADY_EXISTS",
+  it("maps foreign key violations to PRODUCT_BLOCKED_BY_DEPENDENCIES", async () => {
+    const product: Product = {
+      id: crypto.randomUUID(),
+      brand: null,
+      name: "Com estoque ref",
+      category: "C",
+      department: "D",
+      sellWithoutStock: "NO",
+      active: true,
+      salePrice: 5,
+      createdAt: new Date(),
+    };
+
+    const repository: ProductRepository = {
+      async create() {
+        throw new Error("unused");
+      },
+      async findById() {
+        return product;
+      },
+      async findByName() {
+        return null;
+      },
+      async list() {
+        return [];
+      },
+      async update() {
+        return null;
+      },
+      async delete() {
+        const error = Object.assign(new Error("fk"), { code: "23503" });
+        throw error;
+      },
+    };
+
+    const useCase = new DeleteProductUseCase(repository);
+
+    await expect(useCase.execute(product.id)).rejects.toMatchObject({
+      code: "PRODUCT_BLOCKED_BY_DEPENDENCIES",
       statusCode: 409,
     });
   });

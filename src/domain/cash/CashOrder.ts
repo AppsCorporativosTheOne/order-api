@@ -9,4 +9,5 @@ export interface CashOrder {
   notes: string | null;
   openedAt: Date;
   closedAt: Date | null;
+  consumedTotal: number | null;
 }

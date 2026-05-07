@@ -1,11 +1,14 @@
 import { AppError } from "../../domain/errors/AppError.js";
 import { CashDaySessionRepository } from "../../domain/cash/CashDaySessionRepository.js";
+import { CashOrderLineRepository } from "../../domain/cash/CashOrderLineRepository.js";
 import { CashOrderRepository } from "../../domain/cash/CashOrderRepository.js";
+import { roundMoney } from "../../infra/cash/money.js";
 
 export class CloseCashOrderUseCase {
   constructor(
     private readonly cashDaySessionRepository: CashDaySessionRepository,
     private readonly cashOrderRepository: CashOrderRepository,
+    private readonly cashOrderLineRepository: CashOrderLineRepository,
   ) {}
 
   async execute(orderId: string) {
@@ -45,8 +48,11 @@ export class CloseCashOrderUseCase {
       );
     }
 
+    const rawTotal = await this.cashOrderLineRepository.sumLineTotalByCashOrderId(orderId);
+    const consumedTotal = roundMoney(rawTotal);
+
     try {
-      return await this.cashOrderRepository.close(orderId);
+      return await this.cashOrderRepository.close(orderId, consumedTotal);
     } catch {
       throw new AppError(
         "Nao foi possivel atualizar este pedido/mesa.",

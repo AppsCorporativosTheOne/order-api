@@ -47,6 +47,20 @@ paths:
           name: department
           schema:
             type: string
+        - in: query
+          name: activeOnly
+          schema:
+            type: string
+            enum: [ "true", "false" ]
+          description: Lista somente produtos com active=true
+        - in: query
+          name: eligibleForSale
+          schema:
+            type: string
+            enum: [ "true", "false" ]
+          description: >
+            Produtos active=true com estoque positivo nos lotes (soma por stock_entries) ou sellWithoutStock=YES.
+            Pode combinar com search, category e department.
       responses:
         "200":
           description: Lista de produtos
@@ -60,12 +74,7 @@ paths:
     get:
       summary: Busca produto por ID
       parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-            format: uuid
+        - $ref: "#/components/parameters/ProductId"
       responses:
         "200":
           description: Produto encontrado
@@ -75,6 +84,42 @@ paths:
                 $ref: "#/components/schemas/Product"
         "404":
           description: Produto nao encontrado
+    patch:
+      summary: Atualiza produto (parcial)
+      description: |
+        Informe ao menos um campo no corpo. Nome permanece unico por produto excluindo o proprio registro.
+      parameters:
+        - $ref: "#/components/parameters/ProductId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProductInput"
+      responses:
+        "200":
+          description: Produto atualizado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "400":
+          description: Dados invalidos ou corpo vazio (minimo um campo exigido)
+        "404":
+          description: Produto nao encontrado
+        "409":
+          description: Nome ja usado por outro produto
+    delete:
+      summary: Exclui produto
+      parameters:
+        - $ref: "#/components/parameters/ProductId"
+      responses:
+        "204":
+          description: Produto excluido (sem corpo)
+        "404":
+          description: Produto nao encontrado
+        "409":
+          description: Exclusao bloqueada — existem lancamentos de estoque ligados ao produto
   /stocks:
     post:
       summary: Cria um lancamento de estoque
@@ -121,12 +166,7 @@ paths:
     get:
       summary: Busca lancamento de estoque por ID
       parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-            format: uuid
+        - $ref: "#/components/parameters/StockEntryId"
       responses:
         "200":
           description: Lancamento encontrado
@@ -136,6 +176,30 @@ paths:
                 $ref: "#/components/schemas/StockEntry"
         "404":
           description: Lancamento nao encontrado
+    patch:
+      summary: Atualiza lancamento de estoque (parcial)
+      description: |
+        Informe ao menos um campo. Valores de data no corpo usam YYYY-MM-DD.
+        finalValue e recalculado no banco quando quantity ou unitValue mudam.
+      parameters:
+        - $ref: "#/components/parameters/StockEntryId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateStockEntryInput"
+      responses:
+        "200":
+          description: Lancamento atualizado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StockEntry"
+        "400":
+          description: Dados invalidos, validade antes da fabricacao ou corpo sem campos alteraveis
+        "404":
+          description: Lancamento ou produto referenciado nao encontrado
   /operators:
     post:
       summary: Cadastra operador de caixa ou atendimento
@@ -512,16 +576,52 @@ paths:
                 $ref: "#/components/schemas/CashOperatorSessionDetail"
         "404":
           description: Sessao nao encontrada
+  /cash/orders/{cashOrderId}:
+    get:
+      summary: Detalhe da mesa ou pedido com itens e total consumido
+      parameters:
+        - $ref: "#/components/parameters/CashOrderId"
+      responses:
+        "200":
+          description: Pedido + linhas + soma em aberto (ou total gravado se fechado no order)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CashOrderDetail"
+        "404":
+          description: Pedido nao encontrado
+  /cash/orders/{cashOrderId}/lines:
+    post:
+      summary: Lanca item consumido no pedido da mesa ou balcao
+      parameters:
+        - $ref: "#/components/parameters/CashOrderId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCashOrderLineInput"
+      responses:
+        "201":
+          description: Linha registrada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CashOrderLine"
+        "400":
+          description: Falta preco unitario / validacao
+        "404":
+          description: Pedido ou produto nao encontrado
+        "409":
+          description: Dia fechado, pedido encerrado ou produto bloqueado ao pedido
   /cash/orders/{cashOrderId}/close:
     patch:
       summary: Encerra mesa/pedido antes de fechar o drawer do operador
+      description: |
+        Grava `consumedTotal` igual a soma de `line_total` das linhas (arredondamento em duas casas).
+        Permite total zero se nao houve itens lancados.
       parameters:
-        - in: path
-          name: cashOrderId
-          required: true
-          schema:
-            type: string
-            format: uuid
+        - $ref: "#/components/parameters/CashOrderId"
       responses:
         "200":
           description: Pedido encerrado
@@ -534,7 +634,64 @@ paths:
         "404":
           description: Pedido nao encontrado
 components:
+  parameters:
+    ProductId:
+      in: path
+      name: id
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: ID do produto
+    StockEntryId:
+      in: path
+      name: id
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: ID do lancamento de estoque
+    CashOrderId:
+      in: path
+      name: cashOrderId
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Identificador de pedido ou mesa (cash_orders)
   schemas:
+    UpdateProductInput:
+      type: object
+      minProperties: 1
+      properties:
+        brand:
+          type: string
+          nullable: true
+          maxLength: 120
+          description: Marca nao vazia ou null para remover
+        name:
+          type: string
+          minLength: 2
+          maxLength: 160
+        category:
+          type: string
+          minLength: 2
+          maxLength: 120
+        department:
+          type: string
+          minLength: 2
+          maxLength: 120
+        sellWithoutStock:
+          type: string
+          enum: [YES, NO]
+        active:
+          type: boolean
+          description: Marca produto disponivel ou indisponivel para listagens e atendimento
+        salePrice:
+          type: number
+          minimum: 0
+          nullable: true
+          description: Preco de venda sugerido ao lancar itens sem unitPrice explicito (PATCH opcional)
     CreateProductInput:
       type: object
       required:
@@ -560,17 +717,29 @@ components:
           type: string
           enum: [YES, NO]
           example: NO
+        active:
+          type: boolean
+          description: Omitir equivale a true no cadastro
+          default: true
+        salePrice:
+          type: number
+          minimum: 0
+          nullable: true
+          description: Preco de venda sugerido; usado quando POST /cash/orders/.../lines omite unitPrice
     Product:
       allOf:
         - $ref: "#/components/schemas/CreateProductInput"
         - type: object
           required:
             - id
+            - active
             - createdAt
           properties:
             id:
               type: string
               format: uuid
+            active:
+              type: boolean
             createdAt:
               type: string
               format: date-time
@@ -626,6 +795,31 @@ components:
             createdAt:
               type: string
               format: date-time
+    UpdateStockEntryInput:
+      type: object
+      minProperties: 1
+      properties:
+        productId:
+          type: string
+          format: uuid
+        quantity:
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+        manufacturingDate:
+          type: string
+          format: date
+          nullable: true
+        expirationDate:
+          type: string
+          format: date
+          nullable: true
+        unitValue:
+          type: number
+          minimum: 0
+        cost:
+          type: number
+          minimum: 0
     CreateOperatorInput:
       type: object
       required:
@@ -949,6 +1143,66 @@ components:
         notes:
           type: string
           nullable: true
+    CreateCashOrderLineInput:
+      type: object
+      required:
+        - productId
+        - quantity
+      properties:
+        productId:
+          type: string
+          format: uuid
+        quantity:
+          type: number
+          exclusiveMinimum: 0
+        unitPrice:
+          type: number
+          minimum: 0
+          description: Omitir quando o cadastro do produto tiver salePrice preenchido
+        notes:
+          type: string
+          nullable: true
+    CashOrderLine:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        cashOrderId:
+          type: string
+          format: uuid
+        productId:
+          type: string
+          format: uuid
+        quantity:
+          type: number
+        unitPrice:
+          type: number
+          minimum: 0
+        lineTotal:
+          type: number
+        notes:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+    CashOrderDetail:
+      type: object
+      required:
+        - order
+        - lines
+        - linesTotal
+      properties:
+        order:
+          $ref: "#/components/schemas/CashOrder"
+        lines:
+          type: array
+          items:
+            $ref: "#/components/schemas/CashOrderLine"
+        linesTotal:
+          type: number
+          description: Soma atual das linhas (mesmo criterio usado ao fechar o pedido)
     CashOrder:
       type: object
       properties:
@@ -971,6 +1225,11 @@ components:
         notes:
           type: string
           nullable: true
+        consumedTotal:
+          type: number
+          minimum: 0
+          nullable: true
+          description: Gravado no fechamento; reflete valor consumido (soma das linhas)
         openedAt:
           type: string
           format: date-time

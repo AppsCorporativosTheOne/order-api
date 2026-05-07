@@ -29,6 +29,12 @@ export const DEV_SEED_IDS = {
     mariaClosed: "f0000001-0000-4000-8000-000000000001",
     mariaOpen: "f0000002-0000-4000-8000-000000000002",
   },
+  cashOrderLines: {
+    closedCoffee: "f1000001-0000-4000-8000-000000000001",
+    closedJuice: "f1000002-0000-4000-8000-000000000002",
+    openPao: "f1000003-0000-4000-8000-000000000003",
+    openCoffee: "f1000004-0000-4000-8000-000000000004",
+  },
 } as const;
 
 function localBusinessDate(d: Date): string {
@@ -58,6 +64,7 @@ export async function runDevSeed(pool: Pool): Promise<void> {
     cashDay: cd,
     operatorSessions: os,
     cashOrders: co,
+    cashOrderLines: col,
   } = DEV_SEED_IDS;
 
   const client = await pool.connect();
@@ -66,6 +73,7 @@ export async function runDevSeed(pool: Pool): Promise<void> {
 
     await client.query(`
       truncate table
+        cash_order_lines,
         cash_orders,
         cash_principal_movements,
         cash_movements,
@@ -87,10 +95,10 @@ export async function runDevSeed(pool: Pool): Promise<void> {
     );
 
     await client.query(
-      `insert into products (id, brand, name, category, department, sell_without_stock) values
-        ($1::uuid, 'Casa', 'Cafe Americano', 'Bebidas quentes', 'Cozinha', 'NO'),
-        ($2::uuid, 'Casa', 'Pao de Queijo', 'Lanches', 'Cozinha', 'NO'),
-        ($3::uuid, 'Natural', 'Suco Laranja 300ml', 'Bebidas', 'Bar', 'YES')`,
+      `insert into products (id, brand, name, category, department, sell_without_stock, sale_price) values
+        ($1::uuid, 'Casa', 'Cafe Americano', 'Bebidas quentes', 'Cozinha', 'NO', 4.00),
+        ($2::uuid, 'Casa', 'Pao de Queijo', 'Lanches', 'Cozinha', 'NO', 3.50),
+        ($3::uuid, 'Natural', 'Suco Laranja 300ml', 'Bebidas', 'Bar', 'YES', 6.50)`,
       [pr.cafe, pr.pao, pr.suco],
     );
 
@@ -219,10 +227,13 @@ export async function runDevSeed(pool: Pool): Promise<void> {
 
     await client.query(
       `insert into cash_orders (
-        id, cash_day_session_id, cash_operator_session_id, dining_table_id, status, notes, opened_at, closed_at
+        id, cash_day_session_id, cash_operator_session_id, dining_table_id, status, notes, opened_at, closed_at,
+        consumed_total
       ) values
-        ($1::uuid, $2::uuid, $3::uuid, $4::uuid, 'CLOSED', 'SEED pedido encerrado', now() - interval '2 hour', now() - interval '1 hour'),
-        ($5::uuid, $6::uuid, $7::uuid, $8::uuid, 'OPEN', 'SEED pedido em andamento', now() - interval '30 minute', null)`,
+        ($1::uuid, $2::uuid, $3::uuid, $4::uuid, 'CLOSED', 'SEED pedido encerrado', now() - interval '2 hour', now() - interval '1 hour',
+         34.20),
+        ($5::uuid, $6::uuid, $7::uuid, $8::uuid, 'OPEN', 'SEED pedido em andamento — adicione itens ou feche pela API',
+         now() - interval '30 minute', null, null)`,
       [
         co.mariaClosed,
         cd.today,
@@ -232,6 +243,28 @@ export async function runDevSeed(pool: Pool): Promise<void> {
         cd.today,
         os.mariaToday,
         dt.mesa02,
+      ],
+    );
+
+    await client.query(
+      `insert into cash_order_lines (id, cash_order_id, product_id, quantity, unit_price, notes) values
+        ($1::uuid, $2::uuid, $3::uuid, 2, 5.40, 'SEED dois cafes'),
+        ($4::uuid, $5::uuid, $6::uuid, 3, 7.80, null),
+        ($7::uuid, $8::uuid, $9::uuid, 4, 3.75, null),
+        ($10::uuid, $11::uuid, $12::uuid, 1, 10.75, null)`,
+      [
+        col.closedCoffee,
+        co.mariaClosed,
+        pr.cafe,
+        col.closedJuice,
+        co.mariaClosed,
+        pr.suco,
+        col.openPao,
+        co.mariaOpen,
+        pr.pao,
+        col.openCoffee,
+        co.mariaOpen,
+        pr.cafe,
       ],
     );
 
@@ -250,8 +283,9 @@ export async function runDevSeed(pool: Pool): Promise<void> {
       `  Ontem (encerrado): ${yesterday} | caixa: ${cd.yesterday}`,
       `  Operadores: Maria=${op.maria} | Joao=${op.joao} | Carlos=${op.carlos}`,
       `  Sessao Maria (aberta): ${os.mariaToday} | Joao (fechada): ${os.joaoToday}`,
-      `  Pedidos Maria: fechado=${co.mariaClosed} | aberto=${co.mariaOpen}`,
-      "  Fluxo sugerido: PATCH fechar pedido aberto -> PATCH fechar sessao Maria -> GET overview (principal) -> PATCH fechar dia.",
+      `  Pedidos Maria: fechado=${co.mariaClosed} (consumo R$34,20 nos itens seed) | aberto=${co.mariaOpen}`,
+      "  Mesa fechada seed: 2 Cafe (R$10,80) + 3 Suco (R$23,40). Mesa aberta: 4 Paes + 1 Cafe → GET /cash/orders/{id} para linhas e total.",
+      "  Fluxo sugerido: GET pedido aberto -> POST mais linhas (opcional) -> PATCH fechar -> PATCH fechar sessao Maria -> GET overview -> PATCH fechar dia.",
     ].join("\n"),
   );
 }

@@ -13,10 +13,10 @@ import {
   StockEntryRepository,
   UpdateStockEntryData,
 } from "../../domain/stocks/StockEntryRepository.js";
-import { CreateStockEntryUseCase } from "./CreateStockEntryUseCase.js";
+import { UpdateStockEntryUseCase } from "./UpdateStockEntryUseCase.js";
 
 class InMemoryProductRepository implements ProductRepository {
-  private products: Product[] = [];
+  constructor(private readonly products: Product[]) {}
 
   async create(data: CreateProductData): Promise<Product> {
     const product: Product = {
@@ -41,7 +41,9 @@ class InMemoryProductRepository implements ProductRepository {
   }
 
   async findByName(name: string): Promise<Product | null> {
-    return this.products.find((product) => product.name.toLowerCase() === name.toLowerCase()) ?? null;
+    return (
+      this.products.find((product) => product.name.toLowerCase() === name.toLowerCase()) ?? null
+    );
   }
 
   async list(_filters: ListProductsFilters): Promise<Product[]> {
@@ -88,7 +90,7 @@ class InMemoryProductRepository implements ProductRepository {
 }
 
 class InMemoryStockEntryRepository implements StockEntryRepository {
-  private stockEntries: StockEntry[] = [];
+  constructor(private readonly stockEntries: StockEntry[]) {}
 
   async create(data: CreateStockEntryData): Promise<StockEntry> {
     const stockEntry: StockEntry = {
@@ -132,6 +134,7 @@ class InMemoryStockEntryRepository implements StockEntryRepository {
     const expirationDate =
       data.expirationDate !== undefined ? data.expirationDate : prev.expirationDate;
     const cost = data.cost ?? prev.cost;
+
     const next: StockEntry = {
       ...prev,
       productId,
@@ -155,71 +158,101 @@ class InMemoryStockEntryRepository implements StockEntryRepository {
   }
 }
 
-describe("CreateStockEntryUseCase", () => {
-  it("creates a stock entry for an existing product", async () => {
-    const productRepository = new InMemoryProductRepository();
-    const stockEntryRepository = new InMemoryStockEntryRepository();
-    const useCase = new CreateStockEntryUseCase(stockEntryRepository, productRepository);
-    const product = await productRepository.create({
-      name: "Cafe Expresso",
-      category: "Cafes",
-      department: "Bebidas",
+describe("UpdateStockEntryUseCase", () => {
+  async function fixtures() {
+    const products: Product[] = [];
+    const stockEntries: StockEntry[] = [];
+    const productRepository = new InMemoryProductRepository(products);
+    const stockRepository = new InMemoryStockEntryRepository(stockEntries);
+
+    const p1 = await productRepository.create({
+      name: "A",
+      category: "C",
+      department: "D",
       sellWithoutStock: "NO",
     });
-
-    const stockEntry = await useCase.execute({
-      productId: product.id,
-      quantity: 10,
-      manufacturingDate: new Date("2026-04-20T00:00:00.000Z"),
-      expirationDate: new Date("2026-07-20T00:00:00.000Z"),
-      unitValue: 8.5,
-      cost: 4,
+    const p2 = await productRepository.create({
+      name: "B",
+      category: "C",
+      department: "D",
+      sellWithoutStock: "YES",
     });
 
-    expect(stockEntry.productId).toBe(product.id);
-    expect(stockEntry.finalValue).toBe(85);
+    const entry = await stockRepository.create({
+      productId: p1.id,
+      quantity: 5,
+      manufacturingDate: new Date("2026-05-01T00:00:00.000Z"),
+      expirationDate: new Date("2026-08-01T00:00:00.000Z"),
+      unitValue: 10,
+      cost: 3,
+    });
+
+    return {
+      products,
+      productRepository,
+      stockRepository,
+      stockEntries,
+      p1,
+      p2,
+      entry,
+      useCase: new UpdateStockEntryUseCase(stockRepository, productRepository),
+    };
+  }
+
+  it("updates quantity and recalculates final value semantics", async () => {
+    const { useCase, entry } = await fixtures();
+    const updated = await useCase.execute(entry.id, { quantity: 2 });
+
+    expect(updated.quantity).toBe(2);
+    expect(updated.finalValue).toBe(20);
   });
 
-  it("does not create stock for an unknown product", async () => {
-    const productRepository = new InMemoryProductRepository();
-    const stockEntryRepository = new InMemoryStockEntryRepository();
-    const useCase = new CreateStockEntryUseCase(stockEntryRepository, productRepository);
+  it("404 for unknown stock entry id", async () => {
+    const { useCase } = await fixtures();
 
     await expect(
-      useCase.execute({
-        productId: crypto.randomUUID(),
-        quantity: 10,
-        unitValue: 8.5,
-        cost: 4,
-      }),
+      useCase.execute(crypto.randomUUID(), { quantity: 1 }),
+    ).rejects.toMatchObject({
+      code: "STOCK_ENTRY_NOT_FOUND",
+      statusCode: 404,
+    });
+  });
+
+  it("404 when targeting unknown product via productId", async () => {
+    const { useCase, entry } = await fixtures();
+
+    await expect(
+      useCase.execute(entry.id, { productId: crypto.randomUUID() }),
     ).rejects.toMatchObject({
       code: "PRODUCT_NOT_FOUND",
       statusCode: 404,
     });
   });
 
-  it("does not create stock with expiration before manufacturing", async () => {
-    const productRepository = new InMemoryProductRepository();
-    const stockEntryRepository = new InMemoryStockEntryRepository();
-    const useCase = new CreateStockEntryUseCase(stockEntryRepository, productRepository);
-    const product = await productRepository.create({
-      name: "Pao de Queijo",
-      category: "Salgados",
-      department: "Alimentos",
-      sellWithoutStock: "NO",
-    });
+  it("allows reassign to another existing product", async () => {
+    const { useCase, entry, p2 } = await fixtures();
+
+    const updated = await useCase.execute(entry.id, { productId: p2.id });
+
+    expect(updated.productId).toBe(p2.id);
+  });
+
+  it("rejects expiration before manufacturing with merged dates", async () => {
+    const { useCase, entry } = await fixtures();
 
     await expect(
-      useCase.execute({
-        productId: product.id,
-        quantity: 10,
-        manufacturingDate: new Date("2026-05-10T00:00:00.000Z"),
-        expirationDate: new Date("2026-05-01T00:00:00.000Z"),
-        unitValue: 5,
-        cost: 2,
-      }),
+      useCase.execute(entry.id, { expirationDate: new Date("2026-04-01T00:00:00.000Z") }),
     ).rejects.toMatchObject({
       code: "INVALID_EXPIRATION_DATE",
+      statusCode: 400,
+    });
+  });
+
+  it("400 empty body", async () => {
+    const { useCase, entry } = await fixtures();
+
+    await expect(useCase.execute(entry.id, {})).rejects.toMatchObject({
+      code: "STOCK_ENTRY_UPDATE_EMPTY_BODY",
       statusCode: 400,
     });
   });

@@ -19,6 +19,8 @@ API para operacao de restaurantes, lanchonetes, cafeterias e negocios similares.
   "category": "Refrigerantes",
   "department": "Bebidas",
   "sellWithoutStock": "NO",
+  "active": true,
+  "salePrice": 5.9,
   "createdAt": "2026-05-01T13:00:00.000Z"
 }
 ```
@@ -33,6 +35,8 @@ API para operacao de restaurantes, lanchonetes, cafeterias e negocios similares.
 | category | string | sim | Categoria do produto, por exemplo `Refrigerantes`. |
 | department | string | sim | Departamento do produto, por exemplo `Bebidas`. |
 | sellWithoutStock | enum | sim | `YES` permite vender sem estoque; `NO` bloqueia venda sem estoque. |
+| active | boolean | sim em resposta | Produto disponivel catalogo/atendimento. Padrao `true` ao criar. |
+| salePrice | number ou `null` | nao | Preco de venda sugerido; usado ao lancar linha de pedido sem `unitPrice` no body. |
 | createdAt | datetime | sim | Data de cadastro gerada pela API. |
 
 ### Criar Produto
@@ -47,9 +51,15 @@ Request:
   "name": "Coca-Cola Lata 350ml",
   "category": "Refrigerantes",
   "department": "Bebidas",
-  "sellWithoutStock": "NO"
+  "sellWithoutStock": "NO",
+  "active": true,
+  "salePrice": 5.9
 }
 ```
+
+`active` e opcional no cadastro; se omitido, a API usa `true`.
+
+`salePrice` e opcional; `null` ou omitir indica que cada lancamento na mesa deve informar `unitPrice` explicitamente.
 
 Responses:
 
@@ -67,7 +77,11 @@ Query params opcionais:
 | --- | --- |
 | search | Busca por nome ou marca. |
 | category | Filtra por categoria exata. |
-| department | Filtra por departamento exato. |
+| department | Filtra por departamento exata. |
+| activeOnly | `true` quando desejar **somente** produtos `active=true` (padrao de query como em `/dining-tables` e `/operators`). |
+| eligibleForSale | `true` para o filtro utilizado na **listagem para venda**: produtos **ativos** e que **somem alguma quantidade em estoque nos lotes** (`stock_entries`) **ou** tenham `sellWithoutStock === "YES"`. Compativel com `search`, `category` e `department` ao mesmo tempo. |
+
+Se `eligibleForSale=true`, o predicado `active=true` ja esta incluso na regra; `activeOnly` vira redundante quando usado junto apenas para exigir ativos.
 
 Response `200 OK`:
 
@@ -80,6 +94,8 @@ Response `200 OK`:
     "category": "Refrigerantes",
     "department": "Bebidas",
     "sellWithoutStock": "NO",
+    "active": true,
+    "salePrice": null,
     "createdAt": "2026-05-01T13:00:00.000Z"
   }
 ]
@@ -94,6 +110,51 @@ Responses:
 - `200 OK`: produto encontrado.
 - `400 Bad Request`: id invalido.
 - `404 Not Found`: produto nao encontrado.
+
+### Atualizar Produto (parcial)
+
+`PATCH /products/{id}`
+
+Atualiza apenas os campos enviados no JSON. E obrigatorio informar **ao menos uma** propriedade.
+
+| Campo | Tipo no corpo | Observacao |
+| --- | --- | --- |
+| brand | string ou `null` | `null` remove a marca gravada. |
+| name | string | Continua unico (mesma regra do cadastro, ignorando o proprio produto). |
+| category | string | — |
+| department | string | — |
+| sellWithoutStock | `"YES"` ou `"NO"` | — |
+| active | boolean | Liga ou desliga o produto (`false` mantem cadastro oculto de listagens com `eligibleForSale`/`activeOnly`). |
+| salePrice | number ou `null` | Preco de balcao/cardapio; `null` remove o valor gravado. |
+
+Exemplo:
+
+```json
+{
+  "name": "Coca-Cola Lata 310ml",
+  "sellWithoutStock": "YES",
+  "active": true,
+  "salePrice": 6.5
+}
+```
+
+Responses:
+
+- `200 OK`: corpo igual ao modelo de produto apos atualizacao.
+- `400 Bad Request`: dados invalidos, corpo vazio ou `PRODUCT_UPDATE_EMPTY_BODY`.
+- `404 Not Found`: produto nao encontrado (`PRODUCT_NOT_FOUND`).
+- `409 Conflict`: outro produto ja usa o mesmo nome (`PRODUCT_ALREADY_EXISTS`).
+
+### Excluir Produto
+
+`DELETE /products/{id}`
+
+Responses:
+
+- `204 No Content`: produto removido; sem corpo na resposta.
+- `400 Bad Request`: id invalido.
+- `404 Not Found`: produto nao encontrado (`PRODUCT_NOT_FOUND`).
+- `409 Conflict`: existem registros dependentes na tabela de estoque (`stock_entries`); remova ou reatribua os lancamentos antes (`PRODUCT_BLOCKED_BY_DEPENDENCIES`).
 
 ## Estoque
 
@@ -192,6 +253,40 @@ Responses:
 - `400 Bad Request`: id invalido.
 - `404 Not Found`: lancamento nao encontrado.
 
+### Atualizar Lancamento de Estoque (parcial)
+
+`PATCH /stocks/{id}`
+
+Altera apenas os campos informados; e obrigatorio **ao menos um** campo no objeto.
+
+| Campo | Formato no corpo | Observacao |
+| --- | --- | --- |
+| productId | uuid | Produto deve existir. |
+| quantity | numero \> 0 | — |
+| manufacturingDate | `YYYY-MM-DD` ou `null` | Opcional ao atualizar apenas outros campos. |
+| expirationDate | `YYYY-MM-DD` ou `null` | Apos mesclar com o que ja esta gravado, validade nao pode ser anterior a fabricacao. |
+| unitValue | numero \>= 0 | Altera também `finalValue` (valor gerado pela base). |
+| cost | numero \>= 0 | — |
+
+Datas no corpo usam apenas a parte da data (`YYYY-MM-DD`), como no cadastro.
+
+Exemplo (ajuste de quantidade e custo):
+
+```json
+{
+  "quantity": 8,
+  "cost": 3.75
+}
+```
+
+Responses:
+
+- `200 OK`: lancamento atualizado (`StockEntry`).
+- `400 Bad Request`: validacao ou `INVALID_EXPIRATION_DATE` ou corpo vazio /
+  `STOCK_ENTRY_UPDATE_EMPTY_BODY`.
+- `404 Not Found`: lancamento inexistente (`STOCK_ENTRY_NOT_FOUND`) ou `productId`
+  invalido/inexistente (`PRODUCT_NOT_FOUND`).
+
 ## Operadores
 
 Operadores registram quem trabalha cada caixa. O cadastro e simples porque o relacionamento mesa/pedido
@@ -264,8 +359,10 @@ Regras criticas para o frontend:
 
 1. `POST /cash/day-sessions` com `{ "businessDate": "YYYY-MM-DD", "principalOpeningBalance": 500 }` (campo opcional).
 2. `POST /cash/day-sessions/{cashDaySessionId}/operator-sessions` para cada funcionario (`openingBalance` opcional).
-3. Abrir pedidos/mesas via `POST /cash/operator-sessions/{operatorSessionId}/orders` e encerrar com
-   `PATCH /cash/orders/{cashOrderId}/close` quando o atendimento terminar.
+3. Abrir mesa/pedido com `POST /cash/operator-sessions/{operatorSessionId}/orders`; lancar consumo com
+   `POST /cash/orders/{cashOrderId}/lines` (produto ativo, elegivel a venda; precisa de `unitPrice` ou `salePrice` no produto);
+   acompanhar total com `GET /cash/orders/{cashOrderId}` e encerrar com `PATCH /cash/orders/{cashOrderId}/close`
+   para gravar `consumedTotal` igual a soma das linhas (sem decidir pagamento — use movimentos conforme abaixo).
 4. Durante expediente usar `POST /cash/operator-sessions/{operatorSessionId}/movements` para dinheiro no drawer.
 5. Opcionalmente movimentar o caixa principal com `POST /cash/day-sessions/{cashDaySessionId}/principal-movements`.
 6. `PATCH /cash/operator-sessions/{operatorSessionId}/close` com `countedCashBalance` — isso aciona a incorporacao ao principal.
@@ -290,10 +387,34 @@ Regras criticas para o frontend:
 ### Pedidos / mesas em atendimento
 
 Cada registro em `cash_orders` aponta obrigatoriamente para `cash_day_session_id` (caixa principal do dia)
-e `cash_operator_session_id` (quem abriu o fluxo).
+e `cash_operator_session_id` (quem abriu o fluxo). O **consumo** registrado na mesa ou balcao vai para
+`cash_order_lines`, com `quantity`, `unit_price` (valor praticado neste lancamento) e `line_total` calculado
+pelo banco.
 
-- Abrir: `POST /cash/operator-sessions/{operatorSessionId}/orders` — body `{ "diningTableId": null, "notes": "" }`.
-- Encerrar: `PATCH /cash/orders/{cashOrderId}/close`.
+**Modelo resumido (`GET /cash/orders/{cashOrderId}`):**
+
+- `order`: campos usuais da mesa/pedido, incluindo `consumedTotal` preenchido apenas apos encerramento (`null` em aberto).
+- `lines`: itens lancados pelo garcom.
+- `linesTotal`: soma das linhas para conferencia em tempo real — e o mesmo montante persistido em `consumedTotal` no `PATCH /close`.
+
+Fluxo:
+
+| Passo | Endpoint | Notas |
+| --- | --- | --- |
+| Abrir mesa | `POST /cash/operator-sessions/{operatorSessionId}/orders` | Body `{ "diningTableId": "<uuid \| null>", "notes": "..." }`. |
+| Lancar produto | `POST /cash/orders/{cashOrderId}/lines` | Body `{ "productId", "quantity", "unitPrice?": number, "notes?": null }`. Omita `unitPrice` se o produto tiver `salePrice` cadastrado e for desejado usar esse valor. |
+| Consultar | `GET /cash/orders/{cashOrderId}` | Retorno agrega `lines` e `linesTotal`. |
+| Fechar consumo | `PATCH /cash/orders/{cashOrderId}/close` | Grava `consumedTotal = soma(lines.lineTotal)` (arredondado). Permite **zero** caso nao tenha linhas. |
+
+**Regras ao lancar linha:** o pedido e o dia principal precisam estar `OPEN`; o produto deve existir, estar `active`,
+e atender a disponibilidade como na listagem (`sellWithoutStock = YES` ou soma de `stock_entries > 0`).
+A **baixa fisica de estoque** nao e feita automaticamente nesta versao (apenas conferencia de disponibilidade ao lancar).
+
+O operador ainda pode usar `POST /cash/operator-sessions/{operatorSessionId}/movements` (`PAYMENT_RECEIVED`, troco etc.)
+para refletir dinheiro recebido contra o total da mesa quando fizer a cobranca manual.
+
+`GET /cash/day-sessions/{cashDaySessionId}/orders` lista os pedidos daquele dia; cada item passa a incluir
+`consumedTotal` quando ja estiver `CLOSED`.
 
 ### Movimentacao monetaria atual (drawers dos operadores)
 
@@ -391,6 +512,13 @@ Falha enquanto houver alguma sessao de operador com status `OPEN`.
 }
 ```
 
+Codigos uteis nos modulos **produtos**, **estoque** e **pedido/mesa**:
+
+- `PRODUCT_ALREADY_EXISTS`, `PRODUCT_NOT_FOUND`, `PRODUCT_BLOCKED_BY_DEPENDENCIES`,
+  `PRODUCT_UPDATE_EMPTY_BODY`, `PRODUCT_INACTIVE_FOR_ORDER`, `PRODUCT_OUT_OF_STOCK`,
+  `MISSING_UNIT_PRICE`, `INVALID_UNIT_PRICE`
+- `STOCK_ENTRY_NOT_FOUND`, `STOCK_ENTRY_UPDATE_EMPTY_BODY`, `INVALID_EXPIRATION_DATE`
+
 Codigos extras do modulo de caixa (padrao `code` igual ao restante da API):
 
 - `OPERATOR_ALREADY_EXISTS`, `OPERATOR_NOT_FOUND`, `OPERATOR_INACTIVE`
@@ -401,6 +529,7 @@ Codigos extras do modulo de caixa (padrao `code` igual ao restante da API):
 - `OPERATOR_HAS_OPEN_DRAWER`, `OPERATOR_ALREADY_CONSOLIDATED_IN_PRINCIPAL`
 - `INVALID_OPENING_BALANCE`, `INVALID_MOVEMENT_AMOUNT`, `INVALID_PRINCIPAL_OPENING_BALANCE`
 - `CASH_ORDER_NOT_FOUND`, `CASH_ORDER_ALREADY_CLOSED`, `CASH_ORDER_CLOSE_REJECTED`
+  (além de `PRODUCT_NOT_FOUND`, `MISSING_UNIT_PRICE`, etc. ao usar linhas de pedido)
 - `DINING_TABLE_NOT_FOUND`, `DINING_TABLE_INACTIVE`, `DINING_TABLE_ALREADY_EXISTS`, `INVALID_TABLE_NAME`
 - `CASH_DAY_CLOSE_REJECTED`
 

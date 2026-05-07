@@ -2,6 +2,7 @@ import { Router } from "express";
 import { CreateStockEntryUseCase } from "../../application/stocks/CreateStockEntryUseCase.js";
 import { GetStockEntryUseCase } from "../../application/stocks/GetStockEntryUseCase.js";
 import { ListStockEntriesUseCase } from "../../application/stocks/ListStockEntriesUseCase.js";
+import { UpdateStockEntryUseCase } from "../../application/stocks/UpdateStockEntryUseCase.js";
 import { pool } from "../../infra/database/postgres.js";
 import { PostgresProductRepository } from "../../infra/repositories/PostgresProductRepository.js";
 import { PostgresStockEntryRepository } from "../../infra/repositories/PostgresStockEntryRepository.js";
@@ -14,10 +15,12 @@ const stockEntryController = new StockEntryController(
   new CreateStockEntryUseCase(stockEntryRepository, productRepository),
   new ListStockEntriesUseCase(stockEntryRepository),
   new GetStockEntryUseCase(stockEntryRepository),
+  new UpdateStockEntryUseCase(stockEntryRepository, productRepository),
 );
 
 stocksRoutes.post("/", stockEntryController.create);
 stocksRoutes.get("/", stockEntryController.list);
+stocksRoutes.patch("/:id", stockEntryController.updateById);
 stocksRoutes.get("/:id", stockEntryController.getById);
 
 export { stocksRoutes };

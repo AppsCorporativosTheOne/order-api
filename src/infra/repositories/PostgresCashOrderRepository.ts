@@ -15,6 +15,7 @@ type CashOrderRow = {
   notes: string | null;
   opened_at: Date;
   closed_at: Date | null;
+  consumed_total: string | null;
 };
 
 export class PostgresCashOrderRepository implements CashOrderRepository {
@@ -39,7 +40,8 @@ export class PostgresCashOrderRepository implements CashOrderRepository {
          status,
          notes,
          opened_at,
-         closed_at`,
+         closed_at,
+         consumed_total`,
       [
         randomUUID(),
         data.cashDaySessionId,
@@ -62,7 +64,8 @@ export class PostgresCashOrderRepository implements CashOrderRepository {
          status,
          notes,
          opened_at,
-         closed_at
+         closed_at,
+         consumed_total
        from cash_orders
        where id = $1`,
       [id],
@@ -81,7 +84,8 @@ export class PostgresCashOrderRepository implements CashOrderRepository {
          status,
          notes,
          opened_at,
-         closed_at
+         closed_at,
+         consumed_total
        from cash_orders
        where cash_day_session_id = $1
        order by opened_at desc`,
@@ -102,10 +106,10 @@ export class PostgresCashOrderRepository implements CashOrderRepository {
     return Number(result.rows[0].count ?? "0");
   }
 
-  async close(orderId: string): Promise<CashOrder> {
+  async close(orderId: string, consumedTotal: number): Promise<CashOrder> {
     const result = await this.pool.query<CashOrderRow>(
       `update cash_orders
-       set status = 'CLOSED', closed_at = now()
+       set status = 'CLOSED', closed_at = now(), consumed_total = $2
        where id = $1 and status = 'OPEN'
        returning
          id,
@@ -115,8 +119,9 @@ export class PostgresCashOrderRepository implements CashOrderRepository {
          status,
          notes,
          opened_at,
-         closed_at`,
-      [orderId],
+         closed_at,
+         consumed_total`,
+      [orderId, consumedTotal],
     );
 
     const row = result.rows[0];
@@ -138,6 +143,10 @@ export class PostgresCashOrderRepository implements CashOrderRepository {
       notes: row.notes,
       openedAt: row.opened_at,
       closedAt: row.closed_at,
+      consumedTotal:
+        row.consumed_total !== null && row.consumed_total !== undefined
+          ? Number(row.consumed_total)
+          : null,
     };
   }
 }

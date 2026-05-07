@@ -1,10 +1,12 @@
 import { Request, Response } from "express";
+import { AddCashOrderLineUseCase } from "../../application/cash/AddCashOrderLineUseCase.js";
 import { CloseCashDaySessionUseCase } from "../../application/cash/CloseCashDaySessionUseCase.js";
 import { CloseCashOperatorSessionUseCase } from "../../application/cash/CloseCashOperatorSessionUseCase.js";
 import { CloseCashOrderUseCase } from "../../application/cash/CloseCashOrderUseCase.js";
 import { GetCashDaySessionByBusinessDateUseCase } from "../../application/cash/GetCashDaySessionByBusinessDateUseCase.js";
 import { GetCashDaySessionByIdUseCase } from "../../application/cash/GetCashDaySessionByIdUseCase.js";
 import { GetCashDaySessionOverviewUseCase } from "../../application/cash/GetCashDaySessionOverviewUseCase.js";
+import { GetCashOrderDetailUseCase } from "../../application/cash/GetCashOrderDetailUseCase.js";
 import { GetCashOperatorSessionDetailUseCase } from "../../application/cash/GetCashOperatorSessionDetailUseCase.js";
 import { ListCashOrdersForDayUseCase } from "../../application/cash/ListCashOrdersForDayUseCase.js";
 import { OpenCashDaySessionUseCase } from "../../application/cash/OpenCashDaySessionUseCase.js";
@@ -17,6 +19,7 @@ import {
   cashDaySessionIdParamsSchema,
   cashOperatorSessionIdParamsSchema,
   cashOrderIdParamsSchema,
+  createCashOrderLineBodySchema,
   closeCashDaySessionBodySchema,
   closeCashOperatorSessionBodySchema,
   createCashMovementBodySchema,
@@ -41,6 +44,8 @@ export class CashRegisterController {
     private readonly openCashOrderUseCase: OpenCashOrderUseCase,
     private readonly closeCashOrderUseCase: CloseCashOrderUseCase,
     private readonly listCashOrdersForDayUseCase: ListCashOrdersForDayUseCase,
+    private readonly addCashOrderLineUseCase: AddCashOrderLineUseCase,
+    private readonly getCashOrderDetailUseCase: GetCashOrderDetailUseCase,
   ) {}
 
   openCashDaySession = async (request: Request, response: Response) => {
@@ -186,5 +191,26 @@ export class CashRegisterController {
     const order = await this.closeCashOrderUseCase.execute(cashOrderId);
 
     return response.status(200).json(order);
+  };
+
+  addCashOrderLine = async (request: Request, response: Response) => {
+    const { cashOrderId } = cashOrderIdParamsSchema.parse(request.params);
+    const body = createCashOrderLineBodySchema.parse(request.body);
+
+    const line = await this.addCashOrderLineUseCase.execute(cashOrderId, {
+      productId: body.productId,
+      quantity: body.quantity,
+      unitPrice: body.unitPrice,
+      notes: body.notes ?? null,
+    });
+
+    return response.status(201).json(line);
+  };
+
+  getCashOrderDetail = async (request: Request, response: Response) => {
+    const { cashOrderId } = cashOrderIdParamsSchema.parse(request.params);
+    const detail = await this.getCashOrderDetailUseCase.execute(cashOrderId);
+
+    return response.status(200).json(detail);
   };
 }

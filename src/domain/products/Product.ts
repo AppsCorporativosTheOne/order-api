@@ -7,5 +7,7 @@ export interface Product {
   category: string;
   department: string;
   sellWithoutStock: StockSalePolicy;
+  active: boolean;
+  salePrice: number | null;
   createdAt: Date;
 }

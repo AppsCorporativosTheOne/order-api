@@ -22,3 +22,16 @@ export const listStockEntriesQuerySchema = z.object({
 export const stockEntryIdParamsSchema = z.object({
   id: z.string().uuid(),
 });
+
+export const updateStockEntryBodySchema = z
+  .object({
+    productId: z.string().uuid().optional(),
+    quantity: z.coerce.number().positive().optional(),
+    manufacturingDate: dateOnlySchema.nullable().optional(),
+    expirationDate: dateOnlySchema.nullable().optional(),
+    unitValue: z.coerce.number().nonnegative().optional(),
+    cost: z.coerce.number().nonnegative().optional(),
+  })
+  .refine((body) => Object.keys(body).length > 0, {
+    message: "Informe ao menos um campo para atualizar.",
+  });
